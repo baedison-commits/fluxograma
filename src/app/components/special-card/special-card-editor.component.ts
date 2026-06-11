@@ -1,9 +1,11 @@
-import { Component, OnInit, Input, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FlowchartService } from '../../services/flowchart.service';
 import { RichTextEditorService } from '../../services/rich-text-editor.service';
 import { RichTextRun, SpecialCardData, FlowNode } from '../../types';
+
+type AreaKey = 'top' | 'middle' | 'bottom';
 
 @Component({
   selector: 'app-special-card-editor',
@@ -13,19 +15,31 @@ import { RichTextRun, SpecialCardData, FlowNode } from '../../types';
     <div class="overlay" [class.visible]="visible" (click)="onOverlayClick($event)">
       <div class="editor-dialog" (click)="$event.stopPropagation()">
         <div class="editor-header">
-          <h2>📇 Editor de Card Especial</h2>
-          <p class="subtitle">Personalize cabeçalho, corpo e rodapé com formatação rica</p>
+          <h2>📇 Card Especial — 3 Áreas</h2>
+          <p class="subtitle">Cada área (topo, meio, rodapé) tem seu próprio editor de texto rico</p>
         </div>
 
         <div class="editor-body">
 
           <!-- Preview ao vivo -->
-          <div class="live-preview" [style.background]="data.backgroundColor">
-            <div class="preview-header" [style.color]="data.headerColor" [style.textAlign]="data.headerAlign">
-              {{ data.headerText || 'Cabeçalho' }}
+          <div class="live-preview" [style.background]="data.backgroundColor"
+               [style.borderColor]="data.borderColor"
+               [style.borderWidth.px]="data.borderWidth"
+               [style.borderRadius.px]="data.borderRadius">
+            <div class="area area-top">
+              <div *ngFor="let run of data.areas.top" class="rich-line"
+                   [style.fontWeight]="run.bold ? 'bold' : 'normal'"
+                   [style.fontStyle]="run.italic ? 'italic' : 'normal'"
+                   [style.textDecoration]="run.underline ? 'underline' : 'none'"
+                   [style.color]="run.color || '#fff'"
+                   [style.fontSize.px]="run.fontSize || 16"
+                   [style.textAlign]="'center'">
+                {{ run.text }}
+              </div>
             </div>
-            <div class="preview-body">
-              <div *ngFor="let run of data.bodyRuns; let i = index"
+            <div class="area-divider"></div>
+            <div class="area area-middle">
+              <div *ngFor="let run of data.areas.middle" class="rich-line"
                    [style.fontWeight]="run.bold ? 'bold' : 'normal'"
                    [style.fontStyle]="run.italic ? 'italic' : 'normal'"
                    [style.textDecoration]="run.underline ? 'underline' : 'none'"
@@ -34,136 +48,111 @@ import { RichTextRun, SpecialCardData, FlowNode } from '../../types';
                 {{ run.text }}
               </div>
             </div>
-            <div class="preview-footer" [style.color]="data.footerColor" [style.textAlign]="data.footerAlign">
-              {{ data.footerText || 'Rodapé' }}
-            </div>
-          </div>
-
-          <!-- Abas de edição -->
-          <div class="edit-tabs">
-            <button class="tab" [class.active]="activeTab === 'header'" (click)="activeTab = 'header'">Cabeçalho</button>
-            <button class="tab" [class.active]="activeTab === 'body'" (click)="activeTab = 'body'">Corpo</button>
-            <button class="tab" [class.active]="activeTab === 'footer'" (click)="activeTab = 'footer'">Rodapé</button>
-            <button class="tab" [class.active]="activeTab === 'style'" (click)="activeTab = 'style'">Estilo</button>
-          </div>
-
-          <!-- Painel: Cabeçalho -->
-          <div class="edit-panel" *ngIf="activeTab === 'header'">
-            <label>Texto do Cabeçalho</label>
-            <input type="text" [(ngModel)]="data.headerText" placeholder="Digite o título..." class="text-input" />
-
-            <label>Alinhamento</label>
-            <div class="align-buttons">
-              <button [class.active]="data.headerAlign === 'left'" (click)="data.headerAlign = 'left'">⬅️</button>
-              <button [class.active]="data.headerAlign === 'center'" (click)="data.headerAlign = 'center'">⬅️➡️</button>
-              <button [class.active]="data.headerAlign === 'right'" (click)="data.headerAlign = 'right'">➡️</button>
-            </div>
-
-            <label>Cor do Texto</label>
-            <input type="color" [(ngModel)]="data.headerColor" class="color-picker" />
-          </div>
-
-          <!-- Painel: Corpo (editor rico) -->
-          <div class="edit-panel" *ngIf="activeTab === 'body'">
-            <div class="toolbar">
-              <button [class.active]="isFormatActive('bold', bodyCursor)" (click)="toggleBold()" title="Negrito"><b>B</b></button>
-              <button [class.active]="isFormatActive('italic', bodyCursor)" (click)="toggleItalic()" title="Itálico"><i>I</i></button>
-              <button [class.active]="isFormatActive('underline', bodyCursor)" (click)="toggleUnderline()" title="Sublinhado"><u>S</u></button>
-              <span class="toolbar-sep"></span>
-              <button (click)="addBulletList()" title="Lista">• Lista</button>
-              <button (click)="addNumberedList()" title="Lista numerada">1. Lista</button>
-              <span class="toolbar-sep"></span>
-              <button (click)="addRun()" title="Adicionar linha">➕ Linha</button>
-              <button (click)="removeRun()" [disabled]="data.bodyRuns.length <= 1" title="Remover linha">➖</button>
-            </div>
-
-            <div class="body-editor">
-              <div *ngFor="let run of data.bodyRuns; let i = index" class="run-item">
-                <div class="run-header">
-                  <span class="run-number">{{ i + 1 }}</span>
-                  <div class="run-controls">
-                    <button (click)="moveRunUp(i)" [disabled]="i === 0" title="Mover para cima">↑</button>
-                    <button (click)="moveRunDown(i)" [disabled]="i === data.bodyRuns.length - 1" title="Mover para baixo">↓</button>
-                  </div>
-                </div>
-                <textarea
-                  [(ngModel)]="data.bodyRuns[i].text"
-                  (focus)="bodyCursor = i"
-                  placeholder="Digite o texto..."
-                  rows="2"
-                  class="run-textarea"
-                  [style.fontWeight]="run.bold ? 'bold' : 'normal'"
-                  [style.fontStyle]="run.italic ? 'italic' : 'normal'"
-                  [style.textDecoration]="run.underline ? 'underline' : 'none'"
-                ></textarea>
-                <div class="run-format-options">
-                  <label class="format-label">
-                    <input type="checkbox" [(ngModel)]="data.bodyRuns[i].bold" /> <b>B</b>
-                  </label>
-                  <label class="format-label">
-                    <input type="checkbox" [(ngModel)]="data.bodyRuns[i].italic" /> <i>I</i>
-                  </label>
-                  <label class="format-label">
-                    <input type="checkbox" [(ngModel)]="data.bodyRuns[i].underline" /> <u>S</u>
-                  </label>
-                  <label class="format-label">
-                    Cor: <input type="color" [(ngModel)]="data.bodyRuns[i].color" style="width:30px;height:20px;border:none;cursor:pointer" />
-                  </label>
-                  <label class="format-label">
-                    Tamanho:
-                    <select [(ngModel)]="data.bodyRuns[i].fontSize" style="width:60px">
-                      <option [ngValue]="10">10</option>
-                      <option [ngValue]="12">12</option>
-                      <option [ngValue]="14">14</option>
-                      <option [ngValue]="16">16</option>
-                      <option [ngValue]="18">18</option>
-                      <option [ngValue]="20">20</option>
-                      <option [ngValue]="24">24</option>
-                    </select>
-                  </label>
-                </div>
+            <div class="area-divider"></div>
+            <div class="area area-bottom">
+              <div *ngFor="let run of data.areas.bottom" class="rich-line"
+                   [style.fontWeight]="run.bold ? 'bold' : 'normal'"
+                   [style.fontStyle]="run.italic ? 'italic' : 'normal'"
+                   [style.textDecoration]="run.underline ? 'underline' : 'none'"
+                   [style.color]="run.color || '#aaa'"
+                   [style.fontSize.px]="run.fontSize || 12"
+                   [style.textAlign]="'center'">
+                {{ run.text }}
               </div>
             </div>
           </div>
 
-          <!-- Painel: Rodapé -->
-          <div class="edit-panel" *ngIf="activeTab === 'footer'">
-            <label>Texto do Rodapé</label>
-            <input type="text" [(ngModel)]="data.footerText" placeholder="Digite o rodapé..." class="text-input" />
+          <!-- Seletor de Área -->
+          <div class="area-tabs">
+            <button class="tab" [class.active]="activeArea === 'top'" (click)="activeArea = 'top'">📌 Topo</button>
+            <button class="tab" [class.active]="activeArea === 'middle'" (click)="activeArea = 'middle'">📝 Meio</button>
+            <button class="tab" [class.active]="activeArea === 'bottom'" (click)="activeArea = 'bottom'">🔽 Rodapé</button>
+            <button class="tab" [class.active]="activeArea === 'style'" (click)="activeArea = 'style'">🎨 Estilo</button>
+          </div>
 
-            <label>Alinhamento</label>
-            <div class="align-buttons">
-              <button [class.active]="data.footerAlign === 'left'" (click)="data.footerAlign = 'left'">⬅️</button>
-              <button [class.active]="data.footerAlign === 'center'" (click)="data.footerAlign = 'center'">⬅️➡️</button>
-              <button [class.active]="data.footerAlign === 'right'" (click)="data.footerAlign = 'right'">➡️</button>
+          <!-- Editor da Área selecionada -->
+          <div class="area-editor" *ngIf="activeArea !== 'style'">
+            <div class="toolbar">
+              <button [class.active]="isFormatActive('bold')" (click)="toggleFormat('bold')" title="Negrito"><b>B</b></button>
+              <button [class.active]="isFormatActive('italic')" (click)="toggleFormat('italic')" title="Itálico"><i>I</i></button>
+              <button [class.active]="isFormatActive('underline')" (click)="toggleFormat('underline')" title="Sublinhado"><u>S</u></button>
+              <span class="tb-sep"></span>
+              <button (click)="applyBullet()" title="Marcador">• Lista</button>
+              <button (click)="applyNumbered()" title="Numerar">1. Lista</button>
+              <span class="tb-sep"></span>
+              <button (click)="addLine()" title="Nova linha">➕</button>
+              <button (click)="removeLine()" [disabled]="getRuns().length <= 1" title="Remover linha">➖</button>
+              <span class="tb-sep"></span>
+              <input type="color" [(ngModel)]="currentColor" class="color-btn" title="Cor do texto" />
+              <select [(ngModel)]="currentFontSize" class="size-select" title="Tamanho da fonte">
+                <option [ngValue]="10">10</option>
+                <option [ngValue]="12">12</option>
+                <option [ngValue]="14">14</option>
+                <option [ngValue]="16">16</option>
+                <option [ngValue]="18">18</option>
+                <option [ngValue]="20">20</option>
+                <option [ngValue]="24">24</option>
+                <option [ngValue]="28">28</option>
+              </select>
             </div>
 
-            <label>Cor do Texto</label>
-            <input type="color" [(ngModel)]="data.footerColor" class="color-picker" />
+            <div class="runs-list">
+              <div *ngFor="let run of getRuns(); let i = index" class="run-item">
+                <div class="run-header">
+                  <span class="run-num">{{ i + 1 }}</span>
+                  <div class="run-arrows">
+                    <button (click)="moveUp(i)" [disabled]="i === 0">↑</button>
+                    <button (click)="moveDown(i)" [disabled]="i === getRuns().length - 1">↓</button>
+                  </div>
+                </div>
+                <textarea
+                  [(ngModel)]="run.text"
+                  (focus)="selectedLine = i"
+                  placeholder="Digite o texto..."
+                  rows="2"
+                  class="run-text"
+                  [style.fontWeight]="run.bold ? 'bold' : 'normal'"
+                  [style.fontStyle]="run.italic ? 'italic' : 'normal'"
+                  [style.textDecoration]="run.underline ? 'underline' : 'none'"
+                  [style.color]="run.color || '#eee'"
+                  [style.fontSize.px]="run.fontSize || 14"
+                ></textarea>
+              </div>
+            </div>
           </div>
 
           <!-- Painel: Estilo -->
-          <div class="edit-panel" *ngIf="activeTab === 'style'">
-            <label>Cor de Fundo do Card</label>
-            <input type="color" [(ngModel)]="data.backgroundColor" class="color-picker" />
+          <div class="style-panel" *ngIf="activeArea === 'style'">
+            <label>Cor de Fundo</label>
+            <input type="color" [(ngModel)]="data.backgroundColor" class="cpicker" />
 
-            <label>Preview do Card no Canvas</label>
-            <div class="style-presets">
-              <div class="preset" [style.background]="'#2c3e50'" (click)="data.backgroundColor = '#2c3e50'">Azul Escuro</div>
-              <div class="preset" [style.background]="'#34495e'" (click)="data.backgroundColor = '#34495e'">Azul Cinza</div>
-              <div class="preset" [style.background]="'#8e44ad'" (click)="data.backgroundColor = '#8e44ad'">Roxo</div>
-              <div class="preset" [style.background]="'#27ae60'" (click)="data.backgroundColor = '#27ae60'">Verde</div>
-              <div class="preset" [style.background]="'#c0392b'" (click)="data.backgroundColor = '#c0392b'">Vermelho</div>
-              <div class="preset" [style.background]="'#f39c12'" (click)="data.backgroundColor = '#f39c12'">Laranja</div>
-              <div class="preset" [style.background]="'#1a1a2e'" (click)="data.backgroundColor = '#1a1a2e'">Preto</div>
-              <div class="preset" [style.background]="'#ecf0f1'" [style.color]="'#333'" (click)="data.backgroundColor = '#ecf0f1'">Branco</div>
+            <label>Cor da Borda</label>
+            <input type="color" [(ngModel)]="data.borderColor" class="cpicker" />
+
+            <label>Espessura da Borda</label>
+            <input type="range" min="0" max="6" [(ngModel)]="data.borderWidth" class="slider" />
+            <span class="slider-val">{{ data.borderWidth }}px</span>
+
+            <label>Arredondamento</label>
+            <input type="range" min="0" max="20" [(ngModel)]="data.borderRadius" class="slider" />
+            <span class="slider-val">{{ data.borderRadius }}px</span>
+
+            <div class="preset-grid">
+              <div class="preset" style="background:#2c3e50" (click)="data.backgroundColor='#2c3e50'">Azul</div>
+              <div class="preset" style="background:#34495e" (click)="data.backgroundColor='#34495e'">Cinza</div>
+              <div class="preset" style="background:#8e44ad" (click)="data.backgroundColor='#8e44ad'">Roxo</div>
+              <div class="preset" style="background:#27ae60" (click)="data.backgroundColor='#27ae60'">Verde</div>
+              <div class="preset" style="background:#c0392b" (click)="data.backgroundColor='#c0392b'">Vermelho</div>
+              <div class="preset" style="background:#f39c12;color:#333" (click)="data.backgroundColor='#f39c12'">Laranja</div>
+              <div class="preset" style="background:#1a1a2e" (click)="data.backgroundColor='#1a1a2e'">Preto</div>
+              <div class="preset" style="background:#ecf0f1;color:#333" (click)="data.backgroundColor='#ecf0f1'">Branco</div>
             </div>
           </div>
 
         </div>
 
         <div class="editor-footer">
-          <button class="btn-secondary" (click)="cancel()">Cancelar</button>
+          <button class="btn-secondary" (click)="close()">Cancelar</button>
           <button class="btn-primary" (click)="confirm()">Inserir no Canvas</button>
         </div>
       </div>
@@ -193,272 +182,106 @@ import { RichTextRun, SpecialCardData, FlowNode } from '../../types';
       box-shadow: 0 16px 48px rgba(0,0,0,0.5);
     }
 
-    .editor-header {
-      padding: 16px 20px 8px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    .editor-header h2 { margin: 0; color: #e94560; font-size: 18px; }
+    .editor-header { padding: 14px 20px 6px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .editor-header h2 { margin: 0; color: #e94560; font-size: 17px; }
     .subtitle { color: #888; font-size: 12px; margin: 4px 0 0; }
 
-    .editor-body {
-      padding: 12px 20px;
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .editor-footer {
-      padding: 12px 20px;
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-    }
+    .editor-body { padding: 10px 20px; overflow-y: auto; flex: 1; }
+    .editor-footer { padding: 10px 20px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid rgba(255,255,255,0.08); }
 
     /* Live preview */
     .live-preview {
+      border: 2px solid rgba(255,255,255,0.2);
       border-radius: 8px;
-      padding: 0;
-      margin-bottom: 12px;
-      min-height: 100px;
+      min-height: 120px;
       display: flex;
       flex-direction: column;
-      border: 2px solid rgba(255,255,255,0.2);
+      margin-bottom: 10px;
       overflow: hidden;
     }
-    .preview-header {
-      padding: 8px 12px;
-      font-weight: bold;
-      font-size: 15px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-    }
-    .preview-body {
-      padding: 12px;
-      flex: 1;
-    }
-    .preview-footer {
-      padding: 6px 12px;
-      font-size: 12px;
-      border-top: 1px solid rgba(255,255,255,0.1);
-      font-style: italic;
-    }
+    .area { padding: 8px 12px; }
+    .area-top { border-bottom: 1px solid rgba(255,255,255,0.08); text-align: center; }
+    .area-bottom { border-top: 1px solid rgba(255,255,255,0.08); text-align: center; }
+    .rich-line { padding: 1px 0; }
 
-    /* Tabs */
-    .edit-tabs {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 8px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      padding-bottom: 4px;
-    }
+    /* Area tabs */
+    .area-tabs { display: flex; gap: 2px; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 3px; }
     .tab {
-      background: transparent;
-      color: #888;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 4px 4px 0 0;
-      cursor: pointer;
-      font-size: 13px;
-      transition: all 0.2s;
+      background: transparent; color: #888; border: none; padding: 5px 12px;
+      border-radius: 4px 4px 0 0; cursor: pointer; font-size: 12px; transition: all 0.15s;
     }
     .tab:hover { color: #eee; background: rgba(255,255,255,0.05); }
     .tab.active { color: #e94560; background: rgba(233,69,96,0.1); border-bottom: 2px solid #e94560; }
 
-    /* Edit panels */
-    .edit-panel {
-      padding: 4px 0;
-    }
-    .edit-panel label {
-      display: block;
-      color: #aaa;
-      font-size: 12px;
-      margin: 8px 0 4px;
-    }
-    .text-input {
-      width: 100%;
-      padding: 6px 10px;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 4px;
-      background: rgba(255,255,255,0.08);
-      color: #eee;
-      font-size: 14px;
-      box-sizing: border-box;
-    }
-    .color-picker {
-      width: 50px;
-      height: 32px;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 4px;
-      cursor: pointer;
-      background: transparent;
-    }
-    .align-buttons {
-      display: flex;
-      gap: 4px;
-    }
-    .align-buttons button {
-      padding: 4px 12px;
-      border: 1px solid rgba(255,255,255,0.15);
-      background: rgba(255,255,255,0.05);
-      color: #ccc;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .align-buttons button.active { background: rgba(233,69,96,0.2); border-color: #e94560; color: #e94560; }
-
     /* Toolbar */
     .toolbar {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      margin-bottom: 6px;
-      flex-wrap: wrap;
+      display: flex; align-items: center; gap: 3px; padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 6px; flex-wrap: wrap;
     }
     .toolbar button {
-      padding: 4px 10px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.05);
-      color: #ddd;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s;
+      padding: 3px 8px; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05); color: #ddd; border-radius: 3px;
+      cursor: pointer; font-size: 12px; transition: all 0.15s;
     }
     .toolbar button:hover { background: rgba(255,255,255,0.12); }
     .toolbar button.active { background: rgba(233,69,96,0.25); border-color: #e94560; color: #e94560; }
     .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
-    .toolbar-sep {
-      width: 1px;
-      height: 20px;
-      background: rgba(255,255,255,0.15);
-      margin: 0 4px;
+    .tb-sep { width: 1px; height: 18px; background: rgba(255,255,255,0.15); margin: 0 3px; }
+    .color-btn { width: 28px; height: 24px; border: 1px solid rgba(255,255,255,0.2); border-radius: 3px; cursor: pointer; background: transparent; padding: 0; }
+    .size-select {
+      background: rgba(255,255,255,0.08); color: #ddd; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 3px; padding: 2px 4px; font-size: 12px; cursor: pointer;
     }
 
-    /* Body editor */
-    .body-editor {
-      max-height: 200px;
-      overflow-y: auto;
-    }
+    /* Runs list */
+    .runs-list { max-height: 180px; overflow-y: auto; }
     .run-item {
-      background: rgba(255,255,255,0.04);
-      border-radius: 6px;
-      padding: 8px;
-      margin-bottom: 6px;
-      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.04); border-radius: 5px; padding: 6px 8px;
+      margin-bottom: 5px; border: 1px solid rgba(255,255,255,0.06);
     }
-    .run-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 4px;
+    .run-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+    .run-num { font-size: 10px; color: #666; font-weight: bold; }
+    .run-arrows button {
+      padding: 0 5px; border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05); color: #aaa; border-radius: 3px; cursor: pointer; font-size: 10px;
     }
-    .run-number {
-      font-size: 11px;
-      color: #666;
-      font-weight: bold;
+    .run-arrows button:disabled { opacity: 0.3; cursor: not-allowed; }
+    .run-arrows button:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+    .run-text {
+      width: 100%; padding: 5px 8px; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px; background: rgba(255,255,255,0.06); color: #eee;
+      font-size: 13px; resize: vertical; box-sizing: border-box; font-family: inherit;
     }
-    .run-controls button {
-      padding: 1px 6px;
-      border: 1px solid rgba(255,255,255,0.1);
-      background: rgba(255,255,255,0.05);
-      color: #aaa;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 11px;
-    }
-    .run-controls button:disabled { opacity: 0.3; cursor: not-allowed; }
-    .run-controls button:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+    .run-text:focus { outline: none; border-color: #e94560; }
 
-    .run-textarea {
-      width: 100%;
-      padding: 6px 8px;
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 4px;
-      background: rgba(255,255,255,0.06);
-      color: #eee;
-      font-size: 13px;
-      resize: vertical;
-      box-sizing: border-box;
-      font-family: inherit;
-    }
-    .run-textarea:focus { outline: none; border-color: #e94560; }
-
-    .run-format-options {
-      display: flex;
-      gap: 10px;
-      margin-top: 4px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .format-label {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      font-size: 12px;
-      color: #aaa;
-      cursor: pointer;
-    }
-    .format-label input[type="checkbox"] {
-      width: 14px;
-      height: 14px;
-      cursor: pointer;
-    }
-
-    /* Style presets */
-    .style-presets {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-    }
-    .preset {
-      padding: 8px 4px;
-      text-align: center;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 11px;
-      color: #fff;
-      border: 1px solid rgba(255,255,255,0.1);
-      transition: transform 0.15s;
-    }
+    /* Style panel */
+    .style-panel { padding: 4px 0; }
+    .style-panel label { display: block; color: #aaa; font-size: 12px; margin: 8px 0 3px; }
+    .cpicker { width: 50px; height: 30px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; cursor: pointer; background: transparent; }
+    .slider { width: 150px; vertical-align: middle; cursor: pointer; }
+    .slider-val { color: #aaa; font-size: 12px; margin-left: 6px; }
+    .preset-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; margin-top: 6px; }
+    .preset { padding: 6px 4px; text-align: center; border-radius: 4px; cursor: pointer; font-size: 10px; color: #fff; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.15s; }
     .preset:hover { transform: scale(1.05); }
 
     /* Buttons */
-    .btn-primary {
-      background: #e94560;
-      color: #fff;
-      border: none;
-      padding: 8px 20px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 14px;
-    }
+    .btn-primary { background: #e94560; color: #fff; border: none; padding: 7px 18px; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .btn-primary:hover { background: #d63851; }
-    .btn-secondary {
-      background: rgba(255,255,255,0.1);
-      color: #ccc;
-      border: 1px solid rgba(255,255,255,0.2);
-      padding: 8px 20px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 14px;
-    }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: #ccc; border: 1px solid rgba(255,255,255,0.2); padding: 7px 18px; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .btn-secondary:hover { background: rgba(255,255,255,0.2); }
 
     /* Scrollbar */
-    .editor-body::-webkit-scrollbar,
-    .body-editor::-webkit-scrollbar { width: 4px; }
-    .editor-body::-webkit-scrollbar-track,
-    .body-editor::-webkit-scrollbar-track { background: transparent; }
-    .editor-body::-webkit-scrollbar-thumb,
-    .body-editor::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+    .editor-body::-webkit-scrollbar, .runs-list::-webkit-scrollbar { width: 4px; }
+    .editor-body::-webkit-scrollbar-track, .runs-list::-webkit-scrollbar-track { background: transparent; }
+    .editor-body::-webkit-scrollbar-thumb, .runs-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
   `]
 })
 export class SpecialCardEditorComponent implements OnInit {
   visible = false;
-  activeTab: 'header' | 'body' | 'footer' | 'style' = 'header';
-  bodyCursor = 0;
+  activeArea: AreaKey | 'style' = 'top';
+  selectedLine = 0;
+  currentColor = '#ffffff';
+  currentFontSize = 14;
 
   data!: SpecialCardData;
 
@@ -466,24 +289,20 @@ export class SpecialCardEditorComponent implements OnInit {
     private editorService: RichTextEditorService,
     private flowchartService: FlowchartService
   ) {
-    this.data = this.createDefault();
+    this.data = this.editorService.createDefaultCardData();
   }
 
   ngOnInit(): void {
-    window.addEventListener('open-special-card-editor', () => {
-      this.open();
-    });
-  }
-
-  private createDefault(): SpecialCardData {
-    return this.editorService.createDefaultCardData();
+    window.addEventListener('open-special-card-editor', () => this.open());
   }
 
   open(): void {
-    this.data = this.createDefault();
+    this.data = this.editorService.createDefaultCardData();
     this.visible = true;
-    this.activeTab = 'header';
-    this.bodyCursor = 0;
+    this.activeArea = 'top';
+    this.selectedLine = 0;
+    this.currentColor = '#ffffff';
+    this.currentFontSize = 14;
   }
 
   close(): void {
@@ -496,67 +315,81 @@ export class SpecialCardEditorComponent implements OnInit {
     }
   }
 
-  isFormatActive(format: 'bold' | 'italic' | 'underline', index: number): boolean {
-    if (index < 0 || index >= this.data.bodyRuns.length) return false;
-    return !!this.data.bodyRuns[index][format];
+  getRuns(): RichTextRun[] {
+    if (this.activeArea === 'style') return [];
+    return this.data.areas[this.activeArea as AreaKey];
   }
 
-  toggleBold(): void {
-    if (this.bodyCursor < 0 || this.bodyCursor >= this.data.bodyRuns.length) return;
-    const result = this.editorService.insertBold(this.data.bodyRuns, this.bodyCursor);
-    this.data.bodyRuns = result.runs;
+  isFormatActive(format: 'bold' | 'italic' | 'underline'): boolean {
+    const runs = this.getRuns();
+    if (!runs.length || this.selectedLine >= runs.length) return false;
+    return !!runs[this.selectedLine][format];
   }
 
-  toggleItalic(): void {
-    if (this.bodyCursor < 0 || this.bodyCursor >= this.data.bodyRuns.length) return;
-    const result = this.editorService.insertItalic(this.data.bodyRuns, this.bodyCursor);
-    this.data.bodyRuns = result.runs;
+  toggleFormat(format: 'bold' | 'italic' | 'underline'): void {
+    const runs = this.getRuns();
+    if (!runs.length || this.selectedLine >= runs.length) return;
+
+    let result: { runs: RichTextRun[]; cursorPos: number };
+    if (format === 'bold') result = this.editorService.insertBold(runs, this.selectedLine);
+    else if (format === 'italic') result = this.editorService.insertItalic(runs, this.selectedLine);
+    else result = this.editorService.insertUnderline(runs, this.selectedLine);
+
+    const key = this.activeArea as AreaKey;
+    this.data.areas[key] = result.runs;
   }
 
-  toggleUnderline(): void {
-    if (this.bodyCursor < 0 || this.bodyCursor >= this.data.bodyRuns.length) return;
-    const result = this.editorService.insertUnderline(this.data.bodyRuns, this.bodyCursor);
-    this.data.bodyRuns = result.runs;
+  applyBullet(): void {
+    const runs = this.getRuns();
+    if (!runs.length || this.selectedLine >= runs.length) return;
+    const result = this.editorService.insertBulletList(runs, this.selectedLine);
+    const key = this.activeArea as AreaKey;
+    this.data.areas[key] = result.runs;
   }
 
-  addBulletList(): void {
-    if (this.bodyCursor < 0 || this.bodyCursor >= this.data.bodyRuns.length) return;
-    const result = this.editorService.insertBulletList(this.data.bodyRuns, this.bodyCursor);
-    this.data.bodyRuns = result.runs;
+  applyNumbered(): void {
+    const runs = this.getRuns();
+    if (!runs.length || this.selectedLine >= runs.length) return;
+    const result = this.editorService.insertNumberedList(runs, this.selectedLine);
+    const key = this.activeArea as AreaKey;
+    this.data.areas[key] = result.runs;
   }
 
-  addNumberedList(): void {
-    if (this.bodyCursor < 0 || this.bodyCursor >= this.data.bodyRuns.length) return;
-    const result = this.editorService.insertNumberedList(this.data.bodyRuns, this.bodyCursor);
-    this.data.bodyRuns = result.runs;
+  addLine(): void {
+    const key = this.activeArea as AreaKey;
+    this.data.areas[key].push({
+      text: '',
+      bold: false,
+      italic: false,
+      underline: false,
+      color: this.currentColor,
+      fontSize: this.currentFontSize
+    });
+    this.selectedLine = this.data.areas[key].length - 1;
   }
 
-  addRun(): void {
-    this.data.bodyRuns.push({ text: '', bold: false, italic: false, underline: false, color: '#ffffff', fontSize: 14 });
-    this.bodyCursor = this.data.bodyRuns.length - 1;
+  removeLine(): void {
+    const key = this.activeArea as AreaKey;
+    const runs = this.data.areas[key];
+    if (runs.length <= 1) return;
+    runs.splice(this.selectedLine, 1);
+    this.selectedLine = Math.min(this.selectedLine, runs.length - 1);
   }
 
-  removeRun(): void {
-    if (this.data.bodyRuns.length <= 1) return;
-    const idx = Math.min(this.bodyCursor, this.data.bodyRuns.length - 2);
-    this.data.bodyRuns.splice(this.bodyCursor, 1);
-    this.bodyCursor = idx;
-  }
-
-  moveRunUp(index: number): void {
+  moveUp(index: number): void {
     if (index <= 0) return;
-    [this.data.bodyRuns[index], this.data.bodyRuns[index - 1]] = [this.data.bodyRuns[index - 1], this.data.bodyRuns[index]];
-    this.bodyCursor = index - 1;
+    const key = this.activeArea as AreaKey;
+    const runs = this.data.areas[key];
+    [runs[index], runs[index - 1]] = [runs[index - 1], runs[index]];
+    this.selectedLine = index - 1;
   }
 
-  moveRunDown(index: number): void {
-    if (index >= this.data.bodyRuns.length - 1) return;
-    [this.data.bodyRuns[index], this.data.bodyRuns[index + 1]] = [this.data.bodyRuns[index + 1], this.data.bodyRuns[index]];
-    this.bodyCursor = index + 1;
-  }
-
-  cancel(): void {
-    this.close();
+  moveDown(index: number): void {
+    const key = this.activeArea as AreaKey;
+    const runs = this.data.areas[key];
+    if (index >= runs.length - 1) return;
+    [runs[index], runs[index + 1]] = [runs[index + 1], runs[index]];
+    this.selectedLine = index + 1;
   }
 
   confirm(): void {
@@ -571,18 +404,31 @@ export class SpecialCardEditorComponent implements OnInit {
     const node: FlowNode = {
       id: crypto.randomUUID(),
       type: 'special-card',
-      position: { x: Math.round(centerX / 20) * 20, y: Math.round(centerY / 20) * 20 },
+      position: {
+        x: Math.round(centerX / 20) * 20,
+        y: Math.round(centerY / 20) * 20
+      },
       size: { width: 320, height: 240 },
-      text: this.data.headerText,
+      text: '',
       color: this.data.backgroundColor,
       shape: 'special-card',
       fontSize: 14,
-      borderRadius: 8,
-      borderWidth: 2,
-      borderColor: '#ffffff44',
+      borderRadius: this.data.borderRadius,
+      borderWidth: this.data.borderWidth,
+      borderColor: this.data.borderColor,
       textColor: '#ffffff',
       opacity: 1,
-      specialCardData: { ...this.data }
+      specialCardData: {
+        areas: {
+          top: this.data.areas.top.map(r => ({ ...r })),
+          middle: this.data.areas.middle.map(r => ({ ...r })),
+          bottom: this.data.areas.bottom.map(r => ({ ...r }))
+        },
+        backgroundColor: this.data.backgroundColor,
+        borderColor: this.data.borderColor,
+        borderWidth: this.data.borderWidth,
+        borderRadius: this.data.borderRadius
+      }
     };
 
     this.flowchartService.addNode(node);

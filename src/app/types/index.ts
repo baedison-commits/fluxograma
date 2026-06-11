@@ -22,16 +22,18 @@ export interface RichTextRun {
   fontSize?: number;
 }
 
+export interface SpecialCardAreas {
+  top: RichTextRun[];
+  middle: RichTextRun[];
+  bottom: RichTextRun[];
+}
+
 export interface SpecialCardData {
-  headerText: string;
-  headerAlign: 'left' | 'center' | 'right';
-  bodyRuns: RichTextRun[];
-  bodyType: 'paragraph' | 'list';
-  footerText: string;
-  footerAlign: 'left' | 'center' | 'right';
+  areas: SpecialCardAreas;
   backgroundColor: string;
-  headerColor: string;
-  footerColor: string;
+  borderColor: string;
+  borderWidth: number;
+  borderRadius: number;
 }
 
 export interface FlowNode {

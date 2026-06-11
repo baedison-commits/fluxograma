@@ -68,21 +68,28 @@ export class SymbolPaletteService {
   }
 
   createSpecialCardNode(position: Position, cardData: SpecialCardData): FlowNode {
+    // Build text summary from all areas
+    const allTexts = [
+      ...cardData.areas.top.map(r => r.text),
+      ...cardData.areas.middle.map(r => r.text),
+      ...cardData.areas.bottom.map(r => r.text)
+    ].filter(t => t.trim()).join(' | ');
+
     return {
       id: crypto.randomUUID(),
       type: 'special-card',
       position,
       size: { width: 320, height: 240 },
-      text: cardData.headerText,
+      text: allTexts,
       color: cardData.backgroundColor,
       shape: 'special-card',
       fontSize: 14,
-      borderRadius: 8,
-      borderWidth: 2,
-      borderColor: '#ffffff44',
+      borderRadius: cardData.borderRadius,
+      borderWidth: cardData.borderWidth,
+      borderColor: cardData.borderColor,
       textColor: '#ffffff',
       opacity: 1,
-      specialCardData: { ...cardData }
+      specialCardData: { ...cardData, areas: { ...cardData.areas } }
     };
   }
 

@@ -6,15 +6,15 @@ export class RichTextEditorService {
 
   createDefaultCardData(): SpecialCardData {
     return {
-      headerText: 'Meu Card',
-      headerAlign: 'center',
-      bodyRuns: [{ text: 'Digite seu texto aqui...', bold: false, italic: false, underline: false }],
-      bodyType: 'paragraph',
-      footerText: 'Rodapé',
-      footerAlign: 'center',
+      areas: {
+        top: [{ text: 'Cabeçalho', bold: true, italic: false, underline: false, color: '#ffffff', fontSize: 16 }],
+        middle: [{ text: 'Digite o texto principal aqui...', bold: false, italic: false, underline: false, color: '#ffffff', fontSize: 14 }],
+        bottom: [{ text: 'Rodapé', bold: false, italic: true, underline: false, color: '#aaaaaa', fontSize: 12 }]
+      },
       backgroundColor: '#2c3e50',
-      headerColor: '#e94560',
-      footerColor: '#95a5a6'
+      borderColor: '#ffffff44',
+      borderWidth: 2,
+      borderRadius: 8
     };
   }
 

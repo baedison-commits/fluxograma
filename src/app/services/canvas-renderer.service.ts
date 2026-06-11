@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { FlowNode, Connection, Position } from '../types';
+import { FlowNode, Connection, Position, RichTextRun } from '../types';
 
 @Injectable({ providedIn: 'root' })
 export class CanvasRendererService {
@@ -131,12 +131,10 @@ export class CanvasRendererService {
     const { width, height } = node.size;
 
     ctx.save();
-    // Clip apenas com 1px de margem para a borda aparecer
     ctx.beginPath();
     this.drawShape(ctx, node.shape || 'rounded', x + 1, y + 1, width - 2, height - 2, Math.max(2, (node.borderRadius || 10) - 1));
     ctx.clip();
 
-    // Cover fill: preenche todo o espaço, cortando excesso
     const imgAspect = img.naturalWidth / img.naturalHeight;
     const boxAspect = (width - 2) / (height - 2);
     const bx = x + 1;
@@ -147,13 +145,11 @@ export class CanvasRendererService {
     let drawW: number, drawH: number, drawX: number, drawY: number;
 
     if (imgAspect > boxAspect) {
-      // Image is wider than box -> fill by height
       drawH = bh;
       drawW = bh * imgAspect;
       drawX = bx - (drawW - bw) / 2;
       drawY = by;
     } else {
-      // Image is taller -> fill by width
       drawW = bw;
       drawH = bw / imgAspect;
       drawX = bx;
@@ -165,36 +161,41 @@ export class CanvasRendererService {
   }
 
   drawNodeText(ctx: CanvasRenderingContext2D, node: FlowNode): void {
-    if (!node.text) return;
+    if (!node.text && node.type !== 'special-card') return;
+
+    // Special card: renderiza as 3 áreas internas
+    if (node.type === 'special-card' && node.specialCardData) {
+      this.drawSpecialCardContent(ctx, node);
+      return;
+    }
+
     const { x, y } = node.position;
     const { width, height } = node.size;
 
     ctx.save();
 
     if (node.type === 'image' && node.imageData) {
-      // Overlay semi-transparente no rodapé
       const overlayH = 28;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.beginPath();
-      ctx.roundRect(x, y + height - overlayH, width, overlayH, [0, 0, (node.borderRadius || 10), (node.borderRadius || 10)]);
+      this.roundRect(ctx, x, y + height - overlayH, width, overlayH, (node.borderRadius || 10));
       ctx.fill();
       const textY = y + height - overlayH / 2;
       ctx.fillStyle = node.textColor || '#fff';
-      ctx.font = `bold ${node.fontSize || 12}px 'Segoe UI', sans-serif`;
+      ctx.font = `bold ${node.fontSize || 12}px 'Segoe UI', sans-serif'`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(node.text, x + width / 2, textY);
     } else {
-      // Nó normal - texto centralizado
       ctx.fillStyle = node.textColor || '#fff';
-      ctx.font = `${node.fontSize || 14}px 'Segoe UI', sans-serif`;
+      ctx.font = `${node.fontSize || 14}px 'Segoe UI', sans-serif'`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const maxWidth = width - 16;
       const lines = this.wrapText(node.text, maxWidth, ctx);
       const lineHeight = (node.fontSize || 14) + 4;
       const startY = y + height / 2 - (lines.length - 1) * lineHeight / 2;
-      lines.forEach((line, i) => {
+      lines.forEach((line: string, i: number) => {
         ctx.fillText(line, x + width / 2, startY + i * lineHeight);
       });
     }
@@ -202,10 +203,122 @@ export class CanvasRendererService {
     ctx.restore();
   }
 
+  drawSpecialCardContent(ctx: CanvasRenderingContext2D, node: FlowNode): void {
+    const data = node.specialCardData!;
+    const { x, y } = node.position;
+    const { width, height } = node.size;
+    const br = node.borderRadius || 8;
+    const pad = 8;
+
+    ctx.save();
+
+    // Clip para evitar que texto vaze
+    ctx.beginPath();
+    this.roundRect(ctx, x, y, width, height, br);
+    ctx.clip();
+
+    // Alturas proporcionais
+    const topH = Math.max(30, Math.round(height * 0.22));
+    const bottomH = Math.max(24, Math.round(height * 0.18));
+
+    // --- ÁREA 1: TOPO ---
+    const topY = y + pad;
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(x + pad, topY, width - pad * 2, topH - pad);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + pad * 2, y + topH);
+    ctx.lineTo(x + width - pad * 2, y + topH);
+    ctx.stroke();
+
+    this.renderRuns(ctx, data.areas.top, x + width / 2, topY + 2, 'center', width - pad * 2);
+
+    // --- ÁREA 2: MEIO ---
+    const midY = y + topH + 4;
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(x + pad, midY, width - pad * 2, height - topH - bottomH - 8);
+
+    this.renderRuns(ctx, data.areas.middle, x + pad + 4, midY + 2, 'left', width - pad * 2 - 8);
+
+    // --- Linha separadora antes do rodapé ---
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + pad * 2, y + height - bottomH);
+    ctx.lineTo(x + width - pad * 2, y + height - bottomH);
+    ctx.stroke();
+
+    // --- ÁREA 3: RODAPÉ ---
+    const botY = y + height - bottomH + 4;
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(x + pad, botY, width - pad * 2, bottomH - 8);
+
+    this.renderRuns(ctx, data.areas.bottom, x + width / 2, botY + 2, 'center', width - pad * 2);
+
+    ctx.restore();
+  }
+
+  private renderRuns(ctx: CanvasRenderingContext2D, runs: RichTextRun[], startX: number, startY: number, align: 'left' | 'center', maxWidth: number): void {
+    let currentY = startY;
+    for (const run of runs) {
+      if (!run.text.trim()) { currentY += (run.fontSize || 14) + 2; continue; }
+
+      ctx.save();
+      const fontWeight = run.bold ? 'bold ' : '';
+      const fontStyle = run.italic ? 'italic ' : '';
+      const fontSize = run.fontSize || 14;
+      ctx.font = `${fontWeight}${fontStyle}${fontSize}px 'Segoe UI', sans-serif'`;
+      ctx.fillStyle = run.color || '#ffffff';
+      ctx.textBaseline = 'top';
+
+      // Detect bullet/numbered
+      const isBullet = run.text.startsWith('• ');
+      const isNumbered = /^\d+\.\s/.test(run.text);
+      let displayText = run.text;
+      let actualX = startX;
+
+      if (align === 'center') {
+        ctx.textAlign = 'center';
+      } else {
+        ctx.textAlign = 'left';
+        // Handle bullet/numbered prefix
+        if (isBullet || isNumbered) {
+          const prefixEnd = isBullet ? 2 : run.text.indexOf('. ') + 2;
+          const prefix = run.text.substring(0, prefixEnd);
+          displayText = run.text.substring(prefixEnd);
+          ctx.fillStyle = '#e94560';
+          ctx.font = `bold ${fontSize}px 'Segoe UI', sans-serif'`;
+          ctx.fillText(prefix, actualX, currentY);
+          actualX += ctx.measureText(prefix).width + 4;
+          ctx.fillStyle = run.color || '#eeeeee';
+          ctx.font = `${fontWeight}${fontStyle}${fontSize}px 'Segoe UI', sans-serif'`;
+        }
+      }
+
+      // Underline
+      if (run.underline) {
+        const textWidth = ctx.measureText(displayText).width;
+        const lineY = currentY + fontSize + 1;
+        ctx.strokeStyle = run.color || '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(actualX, lineY);
+        ctx.lineTo(actualX + textWidth, lineY);
+        ctx.stroke();
+      }
+
+      ctx.fillText(displayText, actualX, currentY);
+      currentY += fontSize + 3;
+      ctx.restore();
+    }
+  }
+
   wrapText(text: string, maxWidth: number, ctx: CanvasRenderingContext2D): string[] {
     const words = text.split('\n');
     const lines: string[] = [];
-    words.forEach(word => {
+    words.forEach((word: string) => {
       let line = '';
       for (let i = 0; i < word.length; i++) {
         const testLine = line + word[i];
