@@ -1,0 +1,79 @@
+  private drawImageOnNode(ctx: CanvasRenderingContext2D, node: FlowNode): void {
+    if (!node.imageData) return;
+    const img = new Image();
+    img.src = node.imageData;
+    const { x, y } = node.position;
+    const { width, height } = node.size;
+    const padding = 2;
+    const bx = x + padding;
+    const by = y + padding;
+    const bw = width - padding * 2;
+    const bh = height - padding * 2;
+
+    ctx.save();
+    ctx.beginPath();
+    this.drawShape(ctx, node.shape || 'rounded', bx, by, bw, bh, Math.max(4, (node.borderRadius || 10) - padding));
+    ctx.clip();
+
+    // Draw image to fill the entire node area
+    const imgAspect = img.naturalWidth / img.naturalHeight;
+    const boxAspect = bw / bh;
+    let drawW: number, drawH: number, drawX: number, drawY: number;
+
+    if (imgAspect > boxAspect) {
+      // Image is wider - fit by height
+      drawH = bh;
+      drawW = bh * imgAspect;
+      drawX = bx - (drawW - bw) / 2;
+      drawY = by;
+    } else {
+      // Image is taller - fit by width
+      drawW = bw;
+      drawH = bw / imgAspect;
+      drawX = bx;
+      drawY = by - (drawH - bh) / 2;
+    }
+
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    ctx.restore();
+  }
+
+  private drawNodeText(ctx: CanvasRenderingContext2D, node: FlowNode): void {
+    if (!node.text) return;
+    // If it's an image node with image, overlay text at the bottom with semi-transparent bg
+      const { x, y } = node.position;
+      const { width, height } = node.size;
+
+    ctx.save();
+
+    if (node.type === 'image' && node.imageData) {
+      // Draw semi-transparent overlay at bottom for text
+      const overlayH = 28;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.beginPath();
+      ctx.roundRect(x, y + height - overlayH, width, overlayH, [0, 0, (node.borderRadius || 10), (node.borderRadius || 10)]);
+      ctx.fill();
+      const textY = y + height - overlayH / 2;
+      ctx.fillStyle = node.textColor || '#fff';
+      ctx.font = `bold ${node.fontSize || 12}px 'Segoe UI', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(node.text, x + width / 2, textY);
+    } else {
+      // Normal node - center text
+      ctx.fillStyle = node.textColor || '#fff';
+      ctx.font = `${node.fontSize || 14}px 'Segoe UI', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const maxWidth = width - 16;
+      const lines = this.wrapText(node.text, maxWidth, ctx);
+      const lineHeight = (node.fontSize || 14) + 4;
+      const startY = y + height / 2 - (lines.length - 1) * lineHeight / 2;
+      lines.forEach((line, i) => {
+        ctx.fillText(line, x + width / 2, startY + i * lineHeight);
+      });
+    }
+
+    ctx.restore();
+  }
+
