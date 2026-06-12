@@ -64,8 +64,8 @@ export class CanvasComponent implements OnInit, OnDestroy {
   @ViewChild('canvasEl') canvasEl!: ElementRef<HTMLCanvasElement>;
   @ViewChild('container') containerEl!: ElementRef<HTMLDivElement>;
 
-  canvasWidth = Math.round(297 * 3.78); // A4 width in pixels ~ 1123px
-    canvasHeight = Math.round(210 * 3.78); // A4 height in pixels ~ 794px
+  canvasWidth = 5000;
+    canvasHeight = 5000;
   private subs: Subscription[] = [];
   private ctx!: CanvasRenderingContext2D;
   private nodes: FlowNode[] = [];

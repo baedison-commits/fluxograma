@@ -248,66 +248,140 @@ export class ToolbarComponent implements OnInit, OnDestroy {
   }
 
     print(): void {
-    const wasOpen = this.symbolPaletteService.isPaletteOpen();
-    if (wasOpen) {
-      this.symbolPaletteService.closePalette();
-    }
+      const wasOpen = this.symbolPaletteService.isPaletteOpen();
+      if (wasOpen) {
+        this.symbolPaletteService.closePalette();
+      }
     
-    const canvas = document.querySelector('canvas') as HTMLCanvasElement;
-    if (!canvas) {
-      window.print();
-      return;
-    }
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+      if (!canvas) {
+        window.print();
+        return;
+      }
     
-    // Pega os dados do canvas com resolucao original
-    const imgData = canvas.toDataURL('image/png');
+      const nodes = this.service.getNodes();
+      if (nodes.length === 0) {
+        window.print();
+        return;
+      }
     
-    // Abre nova janela com a imagem do canvas no tamanho exato
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) {
-      window.print();
-      return;
-    }
+      // Calcula os limites do conteudo
+      const padding = 40;
+      const minX = Math.min(...nodes.map(n => n.position.x)) - padding;
+      const minY = Math.min(...nodes.map(n => n.position.y)) - padding;
+      const maxX = Math.max(...nodes.map(n => n.position.x + n.size.width)) + padding;
+      const maxY = Math.max(...nodes.map(n => n.position.y + n.size.height)) + padding;
     
-    printWindow.document.write(`
-      <html>
-      <head>
-        <title>Impressao - Fluxograma</title>
-        <style>
-          @page { margin: 0; }
-          body { 
-            margin: 0; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            width: 100vw;
-            height: 100vh;
+      const contentWidth = maxX - minX;
+      const contentHeight = maxY - minY;
+    
+      // Tamanho de uma pagina A4 em pixels (300 DPI) - paisagem
+      const PAGE_WIDTH = 1123;
+      const PAGE_HEIGHT = 794;
+    
+      // Calcula quantas paginas sao necessarias
+      const cols = Math.ceil(contentWidth / PAGE_WIDTH);
+      const rows = Math.ceil(contentHeight / PAGE_HEIGHT);
+      const totalPages = cols * rows;
+    
+      // Cria um canvas temporario para juntar as paginas
+      const imgData = canvas.toDataURL('image/png');
+      const img = new Image();
+    
+      img.onload = () => {
+        // Abre nova janela para impressao
+        const printWindow = window.open('', '_blank', 'width=900,height=700');
+        if (!printWindow) {
+          window.print();
+          return;
+        }
+      
+        let htmlContent = `
+          <html>
+          <head>
+            <title>Impressao - Fluxograma</title>
+            <style>
+              @page { margin: 0; size: landscape; }
+              body { margin: 0; padding: 0; }
+              .page {
+                page-break-after: always;
+                width: 100vw;
+                height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                overflow: hidden;
+              }
+              .page:last-child { page-break-after: auto; }
+              .page img {
+                max-width: 100%;
+                max-height: 100%;
+              }
+              @media print {
+                @page { margin: 0; size: landscape; }
+                body { margin: 0; padding: 0; }
+                .page { 
+                  width: 100%; 
+                  height: 100vh; 
+                  page-break-after: always;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                }
+                .page:last-child { page-break-after: auto; }
+                .page img { max-width: 100%; max-height: 100%; }
+              }
+            </style>
+          </head>
+          <body>
+        `;
+      
+        // Gera cada pagina recortando a parte correspondente do canvas
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const srcX = minX + col * PAGE_WIDTH;
+            const srcY = minY + row * PAGE_HEIGHT;
+          
+            // Cria canvas temporario para recortar a pagina
+            const pageCanvas = document.createElement('canvas');
+            pageCanvas.width = PAGE_WIDTH * 2; // 2x qualidade
+            pageCanvas.height = PAGE_HEIGHT * 2;
+            const pageCtx = pageCanvas.getContext('2d')!;
+          
+            // Fundo branco
+            pageCtx.fillStyle = '#ffffff';
+            pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          
+            // Desenha o recorte do canvas original
+            pageCtx.scale(2, 2);
+            pageCtx.drawImage(img, srcX, srcY, PAGE_WIDTH, PAGE_HEIGHT, 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+          
+            const pageDataUrl = pageCanvas.toDataURL('image/png');
+          
+            htmlContent += `<div class="page"><img src="${pageDataUrl}" /></div>`;
           }
-          img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-          }
-          @media print {
-            @page { margin: 0; }
-            body { margin: 0; padding: 0; }
-            img { width: 100%; height: 100%; object-fit: contain; }
-          }
-        </style>
-      </head>
-      <body>
-        <img src="${imgData}" onload="setTimeout(() => { window.print(); }, 300)" />
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+        }
+      
+        htmlContent += `
+            <script>
+              setTimeout(() => { window.print(); }, 500);
+            </script>
+          </body>
+          </html>
+        `;
+      
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+      };
     
-    if (wasOpen) {
-      setTimeout(() => {
-        this.symbolPaletteService.openPalette();
-      }, 100);
+      img.src = imgData;
+    
+      if (wasOpen) {
+        setTimeout(() => {
+          this.symbolPaletteService.openPalette();
+        }, 100);
+      }
     }
-  }
 
   exportPng(): void {
     const canvas = document.querySelector('canvas');
