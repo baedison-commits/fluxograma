@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, Output, EventEmitter } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FlowchartService } from '../../services/flowchart.service';
+import { SymbolPaletteService } from '../../services/symbol-palette.service';
 import { ToolType, NodeShape, Viewport, FlowNode } from '../../types';
 import { Subscription } from 'rxjs';
 
@@ -187,7 +188,10 @@ export class ToolbarComponent implements OnInit, OnDestroy {
     { id: 'arrow' as ToolType, icon: 'fas fa-arrow-right', title: 'Conectar (A)' },
   ];
 
-  constructor(private service: FlowchartService) {}
+  constructor(
+    private service: FlowchartService,
+    private symbolPaletteService: SymbolPaletteService
+  ) {}
 
   ngOnInit(): void {
     this.subs.push(
@@ -243,7 +247,20 @@ export class ToolbarComponent implements OnInit, OnDestroy {
     }
   }
 
-  print(): void { window.print(); }
+  print(): void {
+    const wasOpen = this.symbolPaletteService.isPaletteOpen();
+    if (wasOpen) {
+      this.symbolPaletteService.closePalette();
+    }
+    
+    window.print();
+    
+    if (wasOpen) {
+      setTimeout(() => {
+        this.symbolPaletteService.openPalette();
+      }, 100);
+    }
+  }
 
   exportPng(): void {
     const canvas = document.querySelector('canvas');

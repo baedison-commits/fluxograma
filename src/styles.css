@@ -33,13 +33,13 @@ html, body {
 
 /* Print styles */
 @media print {
-  app-toolbar, app-properties-panel, app-minimap {
-    display: none !important;
-  }
-  .app-container {
-    background: white !important;
-  }
-  canvas {
-    max-width: 100%;
-  }
+  app-toolbar, app-properties-panel, app-minimap, app-symbol-palette {
+      display: none !important;
+    }
+    .app-container {
+      background: white !important;
+    }
+    canvas {
+      max-width: 100%;
+    }
 }
