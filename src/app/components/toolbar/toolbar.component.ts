@@ -247,13 +247,60 @@ export class ToolbarComponent implements OnInit, OnDestroy {
     }
   }
 
-  print(): void {
+    print(): void {
     const wasOpen = this.symbolPaletteService.isPaletteOpen();
     if (wasOpen) {
       this.symbolPaletteService.closePalette();
     }
     
-    window.print();
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+    if (!canvas) {
+      window.print();
+      return;
+    }
+    
+    // Pega os dados do canvas com resolucao original
+    const imgData = canvas.toDataURL('image/png');
+    
+    // Abre nova janela com a imagem do canvas no tamanho exato
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    
+    printWindow.document.write(`
+      <html>
+      <head>
+        <title>Impressao - Fluxograma</title>
+        <style>
+          @page { margin: 0; }
+          body { 
+            margin: 0; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            width: 100vw;
+            height: 100vh;
+          }
+          img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+          @media print {
+            @page { margin: 0; }
+            body { margin: 0; padding: 0; }
+            img { width: 100%; height: 100%; object-fit: contain; }
+          }
+        </style>
+      </head>
+      <body>
+        <img src="${imgData}" onload="setTimeout(() => { window.print(); }, 300)" />
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
     
     if (wasOpen) {
       setTimeout(() => {
